@@ -73,7 +73,7 @@
           android:layout_height="40dp"
           android:id="@+id/btnRevert"
           android:textSize="11dp"
-          android:text="revert"
+          android:text="rewind"
           />
       <Button
           android:layout_width="60dp"
