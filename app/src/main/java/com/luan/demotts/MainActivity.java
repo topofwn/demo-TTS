@@ -20,34 +20,31 @@ import android.text.style.BackgroundColorSpan;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-
 import java.io.File;
 import java.util.HashMap;
 import java.util.Locale;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static final int REQUEST_WRITE_CODE = 15;
     private static final String REQUEST_TEXT_TO_SPEECH_FILE = "REQUEST_TEXT_TO_SPEECH_FILE";
-
+    private ImageButton reset;
     private TextToSpeech t1;
     private SeekBar prgBar;
-//    private SimpleExoPlayer player;
-    private float volume;
     private TextView currentPosition, maxPosition, contentText;
     private String toSpeak;
     private double speechRate;
     private long estimateTime, gapTime;
-    private int start = 0, end = 0, sotu,duration;
-    private boolean isInit = false;
+    private int start = 0, end = 0, sotu, duration;
+    private boolean isInit = false, isPlayFromStart = true;
     private Button create, play, pause;
     private Handler threadHandler = new Handler();
-
+    private Thread thread;
     public MediaPlayer mediaPlayer;
 
     @Override
@@ -64,20 +61,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         prgBar.setClickable(false);
         play = findViewById(R.id.btnPlay);
         play.setOnClickListener(this);
-
+        reset = findViewById(R.id.btnReset);
+        reset.setOnClickListener(this);
         pause = findViewById(R.id.btnPause);
         pause.setOnClickListener(this);
         pause.setEnabled(false);
         create = findViewById(R.id.btnCreate);
         create.setOnClickListener(this);
+
         Button revert = findViewById(R.id.btnRevert);
         revert.setOnClickListener(this);
         Button forward = findViewById(R.id.btnForward);
         forward.setOnClickListener(this);
         contentText = findViewById(R.id.txtSpeak);
-     //   player = ExoPlayerFactory.newSimpleInstance(getApplicationContext());
-
     }
+
     private String millisecondsToString(int milliseconds) {
         long minutes = TimeUnit.MILLISECONDS.toMinutes((long) milliseconds);
         long seconds = TimeUnit.MILLISECONDS.toSeconds((long) milliseconds);
@@ -91,10 +89,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-
+    protected void onResume() {
+        super.onResume();
+        checkExistFile();
+        Toast.makeText(getApplicationContext(), "If create audio file button enabled then click it. If no then just click play button", Toast.LENGTH_LONG).show();
     }
+
 
     @TargetApi(Build.VERSION_CODES.M)
     public void requestPermissionsSafely(String[] permissions, int requestCode) {
@@ -133,10 +133,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onClick(View v) {
         switch (v.getId()) {
+            case R.id.btnReset:
+                doReset();
+                break;
             case R.id.btnPause:
-                 mediaPlayer.pause();
-
-               // player.setPlayWhenReady(false);
+                mediaPlayer.pause();
                 pause.setEnabled(false);
                 play.setEnabled(true);
                 break;
@@ -150,56 +151,50 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 if (!isInit) {
                     String exStoragePath = Environment.getExternalStorageDirectory().getAbsolutePath();
                     mediaPlayer = MediaPlayer.create(getApplicationContext(), Uri.parse(exStoragePath + "/myAppCache/demo.mp3"));
-                    mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-                    Log.d("DEMO_TTS", "Number of words: " + String.valueOf(countWords(toSpeak)));
-                    long second = TimeUnit.MILLISECONDS.toSeconds((long) mediaPlayer.getDuration());
-                    Log.d("DEMO_TTS", "Speech rate: " + String.valueOf(countWords(toSpeak) / second));
-                    speechRate = countWords(toSpeak)/second;
-                    Log.d("DEMO_TTS", "Create media success");
-//                    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(getApplicationContext(),
-//                            Util.getUserAgent(getApplicationContext(), "yourApplicationName"));
-//                    File audio = new File(exStoragePath + "/myAppCache/demo.mp3");
-//                    MediaSource videoSource = new ExtractorMediaSource.Factory(dataSourceFactory)
-//                            .createMediaSource(Uri.fromFile(audio));
-//                    player.prepare(videoSource);
-                    end = findEnd(start);
-                    sotu = countWords(toSpeak.substring(start,end));
-                    gapTime = Math.round(sotu/speechRate)-1;
-                    estimateTime = estimateTime + (gapTime*1000);
-                    isInit = true;
+                    if (mediaPlayer == null) {
+                        Toast.makeText(getApplicationContext(), "Wait a moment and click play again", Toast.LENGTH_SHORT).show();
+                        return;
+                    } else {
+                        isInit = true;
+                        mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                        Log.d("DEMO_TTS", "Number of words: " + String.valueOf(countWords(toSpeak)));
+                        long second = TimeUnit.MILLISECONDS.toSeconds((long) mediaPlayer.getDuration());
+                        Log.d("DEMO_TTS", "Speech rate: " + String.valueOf(countWords(toSpeak) / second));
+                        speechRate = countWords(toSpeak) / second;
+                        Log.d("DEMO_TTS", "Create media success");
+                    }
                 }
+                if (isPlayFromStart) {
+                    end = findEnd(start);
+                    sotu = countWords(toSpeak.substring(start, end));
+                    gapTime = Math.round(sotu / speechRate) - 1;
+                    estimateTime = estimateTime + (gapTime * 1000);
+                    isPlayFromStart = false;
+                }
+                duration = mediaPlayer.getDuration();
 
-                 duration = mediaPlayer.getDuration();
-                //   long duration = player.getDuration();
                 int currentDuration = mediaPlayer.getCurrentPosition();
-                //      long currentDuration = player.getCurrentPosition();
+
                 if (currentDuration == 0) {
                     prgBar.setMax(duration);
                     maxPosition.setText(millisecondsToString(duration));
                 } else if (currentDuration == duration) {
-                    mediaPlayer.reset();
-                    contentText.setText(toSpeak);
-                    isInit = false;
-                    start =0;
-                    end = 0;
-                    estimateTime = 0;
-                    gapTime = 0;
-                    sotu = 0;
-                    //player.setRepeatMode(Player.REPEAT_MODE_ONE);
+                    mediaPlayer.stop();
+
                 }
                 mediaPlayer.start();
-                //   player.setPlayWhenReady(true);
-                Thread thread = new Thread(new Runnable() {
+
+                thread = new Thread(new Runnable() {
                     @Override
                     public void run() {
                         int Position = mediaPlayer.getCurrentPosition();
-                        //long Position = player.getCurrentPosition();
-                        if(Position <= duration) {
+
+                        if (Position <= duration) {
                             if (Position >= estimateTime) {
                                 //find next estimate time, new start and end
                                 start = end + 1;
                                 end = findEnd(start);
-                                if(start <toSpeak.length() && end< toSpeak.length()) {
+                                if (start < toSpeak.length() && end < toSpeak.length()) {
                                     sotu = countWords(toSpeak.substring(start, end));
                                 }
                                 gapTime = Math.round(sotu / speechRate) - 1;
@@ -213,10 +208,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                                 highlightText(toSpeak, start, end);
                             }
                         }
+
                         String currentPositionStr = millisecondsToString(Position);
                         currentPosition.setText(currentPositionStr);
                         prgBar.setProgress((int) Position);
-
+                        if (Position >= mediaPlayer.getDuration()) {
+                            if (isPlayFromStart) {
+                                currentPosition.setText("0:00");
+                                prgBar.setProgress(0);
+                            }
+                            pause.setEnabled(false);
+                        }
                         // Ngừng thread 50 mili giây.
                         threadHandler.postDelayed(this, 50);
                     }
@@ -233,10 +235,27 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    private void doReset() {
+        mediaPlayer.reset();
+        isInit = false;
+        contentText.setText(toSpeak);
+        mediaPlayer.seekTo(0);
+        prgBar.setProgress(0);
+        start = 0;
+        end = 0;
+        estimateTime = 0;
+        gapTime = 0;
+        sotu = 0;
+        isPlayFromStart = true;
+        play.setEnabled(true);
+        pause.setEnabled(false);
+
+    }
+
 
     private void highlightText(String s, int i, int j) {
         SpannableString string = new SpannableString(s);
-        string.setSpan(new BackgroundColorSpan(Color.YELLOW), i, j, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        string.setSpan(new BackgroundColorSpan(Color.RED), i, j, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         contentText.setText(string);
     }
 
@@ -264,28 +283,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private void doForward() {
         int hientai = mediaPlayer.getCurrentPosition();
         int maxTime = mediaPlayer.getDuration();
-//        long hientai = player.getCurrentPosition();
-//        long maxTime = player.getDuration();
         // 5 giây.
         int ADD_TIME = 5000;
 
         if (hientai + ADD_TIME < maxTime) {
             mediaPlayer.seekTo(hientai + ADD_TIME);
-            //player.seekTo(hientai + ADD_TIME);
         }
 
     }
 
+    private void checkExistFile() {
+        String exStoragePath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/myAppCache/";
+        File firstDirect = new File(exStoragePath);
+        if (firstDirect.exists()) {
+            File secondDirect = new File(exStoragePath + "demo.mp3");
+            if (secondDirect.exists()) {
+                create.setEnabled(false);
+            } else {
+                create.setEnabled(true);
+            }
+        }
+    }
+
     private void doRevert() {
         int hientai = mediaPlayer.getCurrentPosition();
-//        long hientai = player.getCurrentPosition();
 
         // 5 giây.
         int SUBTRACT_TIME = 5000;
 
         if (hientai - SUBTRACT_TIME > 0) {
             mediaPlayer.seekTo(hientai - SUBTRACT_TIME);
-   //         player.seekTo(hientai - SUBTRACT_TIME);
         }
     }
 
@@ -330,7 +357,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d("DEMO_TTS", "error on synthesize to file");
             } else if (i == TextToSpeech.SUCCESS) {
                 Log.d("DEMO_TTS", "success on synthesize to file");
-                Toast.makeText(getApplicationContext(),"Created file",Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), "Created file", Toast.LENGTH_SHORT).show();
+                create.setEnabled(false);
             }
 
         }

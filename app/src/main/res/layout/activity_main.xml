@@ -6,7 +6,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MainActivity">
-
+<ImageButton
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_above="@+id/barField"
+    android:layout_centerHorizontal="true"
+    android:id="@+id/btnReset"
+    android:layout_marginBottom="10dp"
+    android:src="@drawable/reset"
+    android:background="@color/transparent"
+    />
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -31,7 +40,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="10dp"
-
+android:id="@+id/barField"
         android:layout_above="@+id/controlPlayback"
         >
         <SeekBar
